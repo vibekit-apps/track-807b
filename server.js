@@ -39,12 +39,13 @@ const routes = {
 
   'GET /api/tracking/status': (req, res) => {
     if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
-    const history = store.read('tracking-locations').filter((p) => Number.isFinite(p.latitude) && Number.isFinite(p.longitude)).slice(0, 200).reverse();
+    const query = new URL(req.url, 'http://localhost').searchParams; const minNumber = query.get('minNumber');
+    const history = store.read('tracking-locations').filter((p) => Number.isFinite(p.latitude) && Number.isFinite(p.longitude) && (!minNumber || p.minNumber === minNumber)).slice(0, 200).reverse();
     const last = history[history.length - 1] || null;
     // v1 establishes the approved residence from the first recorded device position.
     const geofence = history[0] ? { latitude: history[0].latitude, longitude: history[0].longitude, radiusMeters: 805 } : null;
     const distance = geofence && last ? haversineMeters(geofence, last) : 0;
-    json(res, { subject: { name: 'Monitored individual', initials: 'MI', status: !last ? 'AWAITING GPS' : distance <= geofence.radiusMeters ? 'WITHIN GEOFENCE' : 'OUTSIDE GEOFENCE', updated: last ? new Date(last.recordedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'No location yet', latitude: last?.latitude || null, longitude: last?.longitude || null }, route: { geofence: 'Approved residence', radius: '0.5 mi', boundary: geofence, history } });
+    json(res, { subject: { name: minNumber ? `Inmate ${minNumber}` : 'Monitored individual', initials: minNumber ? minNumber.slice(-2).toUpperCase() : 'MI', status: !last ? 'AWAITING GPS' : distance <= geofence.radiusMeters ? 'WITHIN GEOFENCE' : 'OUTSIDE GEOFENCE', updated: last ? new Date(last.recordedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'No location yet', latitude: last?.latitude || null, longitude: last?.longitude || null }, route: { geofence: 'Approved residence', radius: '0.5 mi', boundary: geofence, history } });
   },
   'GET /api/inmates': (req, res) => {
     if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
