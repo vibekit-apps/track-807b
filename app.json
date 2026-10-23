@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "My App",
-    "slug": "my-app",
+    "name": "Sentinel Bail",
+    "slug": "sentinel-bail",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -28,7 +28,7 @@
       "expo-status-bar",
       "expo-secure-store"
     ],
-    "scheme": "myapp",
+    "scheme": "sentinelbail",
     "runtimeVersion": {
       "policy": "sdkVersion"
     },

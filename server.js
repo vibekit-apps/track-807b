@@ -37,15 +37,38 @@ const MIME = {
 const routes = {
   'GET /health': (req, res) => json(res, { status: 'ok', uptime: process.uptime(), release: currentRelease() }),
 
-  // Example data. Replace with your app's own.
-  'GET /api/items': (req, res) => json(res, store.read('items')),
-  'POST /api/items': async (req, res) => {
-    const { text } = await readBody(req);
-    if (!text || !String(text).trim()) return json(res, { error: 'Write something first' }, 400);
-    const item = { id: crypto.randomUUID(), text: String(text).trim().slice(0, 500), createdAt: new Date().toISOString() };
-    store.write('items', [item, ...store.read('items')]);
-    json(res, item, 201);
+  'GET /api/tracking/status': (req, res) => {
+    if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
+    const last = store.read('tracking-locations')[0];
+    json(res, { subject: { name: 'Monitored individual', initials: 'MI', status: 'WITHIN GEOFENCE', updated: last ? 'just now' : '2 min ago', latitude: last?.latitude || 40.7128, longitude: last?.longitude || -74.006 }, route: { geofence: 'Approved residence', radius: '0.5 mi', points: [{ x: 20, y: 70 }, { x: 28, y: 62 }, { x: 36, y: 66 }, { x: 45, y: 51 }, { x: 53, y: 55 }, { x: 63, y: 44 }] } });
   },
+  'POST /api/tracking/location': async (req, res) => {
+    if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
+    const { latitude, longitude } = await readBody(req);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return json(res, { error: 'A valid location is required' }, 400);
+    const location = { id: crypto.randomUUID(), latitude, longitude, recordedAt: new Date().toISOString() };
+    store.write('tracking-locations', [location, ...store.read('tracking-locations')].slice(0, 300));
+    json(res, location, 201);
+  },
+  'POST /api/check-ins': async (req, res) => {
+    if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
+    const { verified, method, minNumber } = await readBody(req);
+    if (!minNumber || !String(minNumber).trim()) return json(res, { error: 'MIN number is required' }, 400);
+    if (!verified) return json(res, { error: 'Facial identity verification is required' }, 400);
+    const record = { id: crypto.randomUUID(), minNumber: String(minNumber).trim().slice(0, 40), verified: true, method: String(method || 'Facial identity verification'), createdAt: new Date().toISOString() };
+    store.write('check-ins', [record, ...store.read('check-ins')]); json(res, record, 201);
+  },
+  'GET /api/alerts': (req, res) => {
+    if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
+    const alerts = store.read('alerts', [{ id: 'boundary-1', title: 'Boundary review', detail: 'A boundary event requires review.', time: 'Today, 8:42 AM', tone: 'danger', acknowledged: false }, { id: 'checkin-1', title: 'Check-in reminder', detail: 'Required check-in window is open.', time: 'Today, 8:00 AM', tone: 'warning', acknowledged: false }]);
+    json(res, alerts);
+  },
+  'POST /api/alerts/:id/ack': (req, res) => { const id = (req.url || '').split('/')[3]; const alerts = store.read('alerts', [{ id: 'boundary-1', title: 'Boundary review', detail: 'A boundary event requires review.', time: 'Today, 8:42 AM', tone: 'danger', acknowledged: false }, { id: 'checkin-1', title: 'Check-in reminder', detail: 'Required check-in window is open.', time: 'Today, 8:00 AM', tone: 'warning', acknowledged: false }]).map((a) => a.id === id ? { ...a, acknowledged: true } : a); store.write('alerts', alerts); json(res, { ok: true }); },
+  'GET /api/schedule': (req, res) => {
+    if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
+    json(res, store.read('schedule', [{ id: 'work', name: 'Work window', range: 'Mon–Fri · 8:00 AM — 5:30 PM', enabled: true }, { id: 'appointment', name: 'Appointments', range: 'Approved appointments only', enabled: true }]));
+  },
+  'PATCH /api/schedule/:id': async (req, res) => { const id = (req.url || '').split('/')[3]; const body = await readBody(req); const list = store.read('schedule', [{ id: 'work', name: 'Work window', range: 'Mon–Fri · 8:00 AM — 5:30 PM', enabled: true }, { id: 'appointment', name: 'Appointments', range: 'Approved appointments only', enabled: true }]); const next = list.map((w) => w.id === id ? { ...w, enabled: !!body.enabled } : w); store.write('schedule', next); json(res, next.find((w) => w.id === id) || next[0]); },
 
   // Accounts (lib/auth.js). The app keeps the returned token (lib/api.ts).
   'POST /api/auth/signup': async (req, res) => {
@@ -253,7 +276,9 @@ http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
     pathname = url.pathname;
-    const handler = routes[`${req.method} ${pathname}`];
+    let handler = routes[`${req.method} ${pathname}`];
+    if (!handler && req.method === 'POST' && /^\/api\/alerts\/[^/]+\/ack$/.test(pathname)) handler = routes['POST /api/alerts/:id/ack'];
+    if (!handler && req.method === 'PATCH' && /^\/api\/schedule\/[^/]+$/.test(pathname)) handler = routes['PATCH /api/schedule/:id'];
     if (handler) return await handler(req, res);
     if (pathname === `${EXPO}/manifest`) return serveManifest(req, res, url);
     if (pathname.startsWith(`${EXPO}/r/`)) {

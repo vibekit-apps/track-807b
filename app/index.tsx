@@ -1,87 +1,14 @@
-// The first screen. A working example of the one pattern every screen uses:
-// load from this app's server with api() and show errors in words. While the
-// server wakes, the app's frame covers the screen on its own (app/_layout.tsx).
-// Replace it with the real app.
 import Ionicons from '@expo/vector-icons/Ionicons';
+import * as Location from 'expo-location';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../lib/api';
+import { Button, C, Card, Pill, Screen } from '../components/SentinelUI';
 
-type Item = { id: string; text: string; createdAt: string };
-
-export default function Home() {
-  const [items, setItems] = useState<Item[] | null>(null);
-  const [draft, setDraft] = useState('');
-  const [error, setError] = useState('');
-
-  const load = useCallback(async () => {
-    setError('');
-    try {
-      setItems(await api<Item[]>('GET', '/api/items'));
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  const add = async () => {
-    const text = draft.trim();
-    if (!text) return;
-    setError('');
-    try {
-      const item = await api<Item>('POST', '/api/items', { text });
-      setItems((prev) => [item, ...(prev || [])]);
-      setDraft('');
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-
-  return (
-    <SafeAreaView style={styles.screen}>
-      <Text style={styles.title}>My App</Text>
-      <View style={styles.row}>
-        <TextInput
-          style={styles.input}
-          value={draft}
-          onChangeText={setDraft}
-          onSubmitEditing={add}
-          placeholder="Add an item"
-          placeholderTextColor="#8a8aa0"
-          returnKeyType="done"
-        />
-        <Pressable style={styles.button} onPress={add} accessibilityRole="button" accessibilityLabel="Add">
-          <Ionicons name="add" size={24} color="#fff" />
-        </Pressable>
-      </View>
-      {!!error && (
-        <Pressable onPress={load} accessibilityRole="button">
-          <Text style={styles.error}>{error} Tap to retry.</Text>
-        </Pressable>
-      )}
-      {items === null && !error ? (
-        <ActivityIndicator style={{ marginTop: 32 }} />
-      ) : (
-        <FlatList
-          data={items || []}
-          keyExtractor={(i) => i.id}
-          renderItem={({ item }) => <Text style={styles.item}>{item.text}</Text>}
-          ListEmptyComponent={<Text style={styles.note}>Nothing yet. Add the first item.</Text>}
-        />
-      )}
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, paddingHorizontal: 20, backgroundColor: '#0f0f14' },
-  title: { fontSize: 28, fontWeight: '700', color: '#fff', marginTop: 16, marginBottom: 12 },
-  row: { flexDirection: 'row', gap: 10, marginBottom: 12 },
-  input: { flex: 1, backgroundColor: '#1c1c26', color: '#fff', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16 },
-  button: { backgroundColor: '#7c5cff', borderRadius: 12, paddingHorizontal: 14, justifyContent: 'center', alignItems: 'center' },
-  item: { color: '#e8e8f0', fontSize: 17, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#2a2a36' },
-  note: { color: '#8a8aa0', fontSize: 15, marginVertical: 8 },
-  error: { color: '#f87171', fontSize: 15, marginVertical: 8 },
-});
+type Status = { subject: { name: string; initials: string; status: string; updated: string; latitude: number; longitude: number }; route: { points: { x: number; y: number }[]; geofence: string; radius: string } };
+export default function LiveMap() { const [data, setData] = useState<Status | null>(null); const [loading, setLoading] = useState(true); const [message, setMessage] = useState('');
+ const load = useCallback(async () => { try { setData(await api<Status>('GET', '/api/tracking/status')); } catch (e) { setMessage((e as Error).message); } finally { setLoading(false); } }, []); useEffect(() => { load(); }, [load]);
+ const share = async () => { try { const p = await Location.getCurrentPositionAsync({}); await api('POST', '/api/tracking/location', { latitude: p.coords.latitude, longitude: p.coords.longitude }); setMessage('Current device location shared securely.'); load(); } catch { setMessage('Location permission is required to share this device location.'); } };
+ return <SafeAreaView style={{ flex: 1, backgroundColor: C.navy }}><Screen title="Live Map" subtitle="Current GPS status and today’s movement history">{loading ? <ActivityIndicator color={C.blue} /> : <><Card style={styles.map}><View style={styles.grid}>{data?.route.points.map((p, i) => <View key={i} style={[styles.pathDot, { left: `${p.x}%`, top: `${p.y}%`, opacity: .4 + i / 14 }]} />)}<View style={styles.pin}><Ionicons name="location" size={24} color={C.navy} /></View><View style={styles.zone}><Text style={styles.zoneText}>{data?.route.geofence}</Text><Text style={styles.zoneSub}>{data?.route.radius} permitted area</Text></View></View></Card><Card><View style={styles.person}><View style={styles.avatar}><Text style={styles.avatarText}>{data?.subject.initials}</Text></View><View style={{ flex: 1 }}><Text style={styles.personName}>{data?.subject.name}</Text><Text style={styles.muted}>Updated {data?.subject.updated}</Text></View><Pill label={data?.subject.status || 'Loading'} tone="good" /></View><View style={styles.divider} /><View style={styles.infoRow}><View><Text style={styles.infoLabel}>GEOFENCE</Text><Text style={styles.info}>{data?.route.geofence}</Text></View><View><Text style={styles.infoLabel}>TODAY</Text><Text style={styles.info}>Movement history on</Text></View></View></Card><Button label="Share this device location" onPress={share} icon="navigate" />{message ? <Text style={styles.message}>{message}</Text> : null}</>}</Screen></SafeAreaView> }
+const styles = StyleSheet.create({ map: { height: 284, padding: 0, overflow: 'hidden', backgroundColor: '#13203a' }, grid: { flex: 1, borderRadius: 18, borderWidth: 1, borderColor: '#38bdf833', backgroundColor: '#14213a' }, pathDot: { position: 'absolute', height: 10, width: 10, borderRadius: 10, backgroundColor: C.blue, borderWidth: 2, borderColor: C.navy }, pin: { position: 'absolute', left: '63%', top: '43%', height: 46, width: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: C.blue, borderWidth: 7, borderColor: '#38bdf844' }, zone: { position: 'absolute', left: 16, bottom: 15, backgroundColor: '#0f172ad9', borderRadius: 11, padding: 10 }, zoneText: { color: C.pale, fontWeight: '800', fontSize: 13 }, zoneSub: { color: C.muted, fontSize: 11, marginTop: 2 }, person: { flexDirection: 'row', alignItems: 'center', gap: 11 }, avatar: { height: 44, width: 44, borderRadius: 22, backgroundColor: '#38bdf822', alignItems: 'center', justifyContent: 'center' }, avatarText: { color: C.blue, fontWeight: '900' }, personName: { color: C.pale, fontSize: 17, fontWeight: '800' }, muted: { color: C.muted, fontSize: 12, marginTop: 3 }, divider: { height: 1, backgroundColor: C.line, marginVertical: 14 }, infoRow: { flexDirection: 'row', justifyContent: 'space-between' }, infoLabel: { color: C.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1 }, info: { color: C.pale, fontSize: 13, fontWeight: '700', marginTop: 5 }, message: { color: C.blue, textAlign: 'center', fontSize: 13 } });

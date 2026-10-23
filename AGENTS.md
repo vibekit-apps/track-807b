@@ -1,7 +1,7 @@
 # Agent guide
 
 App: **track-807b** at https://track-807b.vibekit.bot
-Repo: template/expo
+Repo: vibekit-apps/track-807b
 
 ## NEVER (breaks the product)
 - **NEVER point the user at localhost / `npm start` / `expo start`**: they have no terminal. Their link, whenever they ask for one, is https://vibekit.bot/expo-go/track-807b: it opens the app in the free **Expo Go** app and helps install it. The live URL above is only the web version. After a deploy they close and reopen it in Expo Go. Never Add to Home Screen.
