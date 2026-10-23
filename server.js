@@ -75,9 +75,22 @@ const routes = {
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return json(res, { error: 'A valid location is required' }, 400);
     if (!Number.isFinite(accuracyMeters) || accuracyMeters > 10) return json(res, { error: 'A GPS reading accurate to within 10 meters is required' }, 422);
     const location = { id: crypto.randomUUID(), minNumber: String(minNumber || '').trim() || null, latitude, longitude, accuracyMeters, recordedAt: new Date().toISOString() };
-    // Keep a full same-day movement trail for the live map while bounding v1 storage.
-    store.write('tracking-locations', [location, ...store.read('tracking-locations')].filter((entry) => Date.now() - new Date(entry.recordedAt).getTime() < 86400000).slice(0, 2000));
-    json(res, location, 201);
+    // Keep a same-day, per-inmate trail. The first precise location establishes the v1 approved-address boundary.
+    const history = [location, ...store.read('tracking-locations')].filter((entry) => Date.now() - new Date(entry.recordedAt).getTime() < 86400000).slice(0, 2000);
+    store.write('tracking-locations', history);
+    const sameInmate = history.filter((entry) => entry.minNumber === location.minNumber).reverse();
+    const approvedAddress = sameInmate[0];
+    const distanceMeters = approvedAddress ? Math.round(haversineMeters(approvedAddress, location)) : 0;
+    if (location.minNumber && distanceMeters > 805) {
+      const alerts = store.read('alerts', []);
+      const duplicate = alerts.some((alert) => alert.minNumber === location.minNumber && alert.type === 'address-violation' && !alert.acknowledged);
+      if (!duplicate) {
+        const inmate = store.read('inmates').find((item) => item.minNumber === location.minNumber);
+        alerts.unshift({ id: crypto.randomUUID(), type: 'address-violation', minNumber: location.minNumber, inmateName: inmate?.name || '', title: 'Address verification violation', detail: `${location.minNumber} is ${distanceMeters} m outside the approved address boundary.`, time: new Date().toLocaleString(), tone: 'danger', acknowledged: false, location, approvedAddress, distanceMeters });
+        store.write('alerts', alerts);
+      }
+    }
+    json(res, { ...location, distanceMeters, violation: !!location.minNumber && distanceMeters > 805 }, 201);
   },
   'POST /api/check-ins': async (req, res) => {
     if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
@@ -87,10 +100,19 @@ const routes = {
     const record = { id: crypto.randomUUID(), minNumber: String(minNumber).trim().slice(0, 40), verified: true, method: String(method || 'Facial identity verification'), createdAt: new Date().toISOString() };
     store.write('check-ins', [record, ...store.read('check-ins')]); json(res, record, 201);
   },
+  'GET /api/reports/management': (req, res) => {
+    if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
+    const inmates = store.read('inmates'); const locations = store.read('tracking-locations'); const violations = store.read('alerts').filter((alert) => alert.type === 'address-violation');
+    json(res, { generatedAt: new Date().toISOString(), totals: { inmates: inmates.length, preciseLocations: locations.length, openViolations: violations.filter((alert) => !alert.acknowledged).length }, inmates: inmates.map((inmate) => { const last = locations.find((location) => location.minNumber === inmate.minNumber) || null; const open = violations.filter((alert) => alert.minNumber === inmate.minNumber && !alert.acknowledged).length; return { minNumber: inmate.minNumber, name: inmate.name, lastLocation: last, openViolations: open }; }) });
+  },
   'GET /api/alerts': (req, res) => {
     if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
-    const alerts = store.read('alerts', [{ id: 'boundary-1', title: 'Boundary review', detail: 'A boundary event requires review.', time: 'Today, 8:42 AM', tone: 'danger', acknowledged: false }, { id: 'checkin-1', title: 'Check-in reminder', detail: 'Required check-in window is open.', time: 'Today, 8:00 AM', tone: 'warning', acknowledged: false }]);
-    json(res, alerts);
+    json(res, store.read('alerts', []));
+  },
+  'GET /api/inmates/:minNumber/violations': (req, res) => {
+    if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
+    const minNumber = decodeURIComponent((req.url || '').split('/')[3] || '');
+    json(res, store.read('alerts', []).filter((alert) => alert.type === 'address-violation' && alert.minNumber === minNumber));
   },
   'POST /api/alerts/:id/ack': (req, res) => { const id = (req.url || '').split('/')[3]; const alerts = store.read('alerts', [{ id: 'boundary-1', title: 'Boundary review', detail: 'A boundary event requires review.', time: 'Today, 8:42 AM', tone: 'danger', acknowledged: false }, { id: 'checkin-1', title: 'Check-in reminder', detail: 'Required check-in window is open.', time: 'Today, 8:00 AM', tone: 'warning', acknowledged: false }]).map((a) => a.id === id ? { ...a, acknowledged: true } : a); store.write('alerts', alerts); json(res, { ok: true }); },
   'GET /api/schedule': (req, res) => {
@@ -310,6 +332,7 @@ http.createServer(async (req, res) => {
     let handler = routes[`${req.method} ${pathname}`];
     if (!handler && req.method === 'POST' && /^\/api\/alerts\/[^/]+\/ack$/.test(pathname)) handler = routes['POST /api/alerts/:id/ack'];
     if (!handler && req.method === 'PATCH' && /^\/api\/schedule\/[^/]+$/.test(pathname)) handler = routes['PATCH /api/schedule/:id'];
+    if (!handler && req.method === 'GET' && /^\/api\/inmates\/[^/]+\/violations$/.test(pathname)) handler = routes['GET /api/inmates/:minNumber/violations'];
     if (handler) return await handler(req, res);
     if (pathname === `${EXPO}/manifest`) return serveManifest(req, res, url);
     if (pathname.startsWith(`${EXPO}/r/`)) {

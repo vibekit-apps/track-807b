@@ -1,6 +1,6 @@
 # Agent guide
 
-App: **track-807b** at https://track-807b.vibekit.bot
+App: **Sat track** at https://track-807b.vibekit.bot
 Repo: vibekit-apps/track-807b
 
 ## NEVER (breaks the product)

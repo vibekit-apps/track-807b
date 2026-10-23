@@ -1,0 +1,2 @@
+alert_id,min_number,inmate_name,alert_type,alerted_at_local,latitude,longitude,gps_accuracy_meters,approved_address_latitude,approved_address_longitude,distance_outside_boundary_meters,status,reviewed_by,reviewed_at_local,notes
+VA-000001,MIN-000001,,address-verification-violation,2026-10-23T20:52:00+11:00,,,,,,,Open,,,
