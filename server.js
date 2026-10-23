@@ -102,8 +102,13 @@ const routes = {
   },
   'GET /api/reports/management': (req, res) => {
     if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
-    const inmates = store.read('inmates'); const locations = store.read('tracking-locations'); const violations = store.read('alerts').filter((alert) => alert.type === 'address-violation');
-    json(res, { generatedAt: new Date().toISOString(), totals: { inmates: inmates.length, preciseLocations: locations.length, openViolations: violations.filter((alert) => !alert.acknowledged).length }, inmates: inmates.map((inmate) => { const last = locations.find((location) => location.minNumber === inmate.minNumber) || null; const open = violations.filter((alert) => alert.minNumber === inmate.minNumber && !alert.acknowledged).length; return { minNumber: inmate.minNumber, name: inmate.name, lastLocation: last, openViolations: open }; }) });
+    const inmates = store.read('inmates'); const locations = store.read('tracking-locations'); const violations = store.read('alerts').filter((alert) => alert.type === 'address-violation'); const now = Date.now();
+    json(res, { generatedAt: new Date().toISOString(), totals: { inmates: inmates.length, preciseLocations: locations.length, openViolations: violations.filter((alert) => !alert.acknowledged).length }, inmates: inmates.map((inmate) => { const last = locations.find((location) => location.minNumber === inmate.minNumber) || null; const open = violations.filter((alert) => alert.minNumber === inmate.minNumber && !alert.acknowledged).length; const stale = !last || now - new Date(last.recordedAt).getTime() > 120000; return { minNumber: inmate.minNumber, name: inmate.name, lastLocation: last, openViolations: open, signalStatus: stale ? 'SIGNAL STALE' : 'ACTIVE' }; }) });
+  },
+  'POST /api/tracking/signal': async (req, res) => {
+    if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
+    const { minNumber, state } = await readBody(req); const signal = { id: crypto.randomUUID(), minNumber: String(minNumber || '').trim(), state: String(state || 'active'), recordedAt: new Date().toISOString() };
+    store.write('tracking-signals', [signal, ...store.read('tracking-signals')].slice(0, 1000)); json(res, signal, 201);
   },
   'GET /api/alerts': (req, res) => {
     if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
