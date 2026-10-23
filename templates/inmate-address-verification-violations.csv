@@ -1,0 +1,3 @@
+violation_id,min_number,inmate_name,detected_at_local,approved_address,approved_latitude,approved_longitude,logged_latitude,logged_longitude,gps_accuracy_meters,distance_from_address_meters,verification_status,violation_visible_when_min_checked,reviewed_by,reviewed_at_local,notes
+AV-000001,MIN-000001,,2026-10-23T20:20:00+11:00,,,,,,,,Pending review,YES,,,
+AV-000002,MIN-000002,,2026-10-23T20:20:00+11:00,,,,,,,,Pending review,YES,,,
