@@ -127,8 +127,14 @@ const routes = {
     if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
     const { minNumber, destinationType, destinationName, destinationAddress, latitude, longitude, visitDate, leaveTime, returnTime } = await readBody(req);
     if (!minNumber || !destinationType || !destinationName || !destinationAddress || !visitDate || !leaveTime || !returnTime || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return json(res, { error: 'MIN number, destination, address, date, leave time, return time, and location are required' }, 400);
-    const visit = { id: crypto.randomUUID(), minNumber: String(minNumber).trim().slice(0, 40), destinationType: destinationType === 'Police station' ? 'Police station' : 'Doctor', destinationName: String(destinationName).trim().slice(0, 120), destinationAddress: String(destinationAddress).trim().slice(0, 240), visitDate: String(visitDate), leaveTime: String(leaveTime), returnTime: String(returnTime), latitude, longitude, radiusMeters: 100, status: 'SCHEDULED', arrivedAt: null, departedAt: null, durationMinutes: null, createdAt: new Date().toISOString() };
+    const visit = { id: crypto.randomUUID(), minNumber: String(minNumber).trim().slice(0, 40), destinationType: destinationType === 'Police station' ? 'Police station' : 'Doctor', destinationName: String(destinationName).trim().slice(0, 120), destinationAddress: String(destinationAddress).trim().slice(0, 240), addressVerified: false, visitDate: String(visitDate), leaveTime: String(leaveTime), returnTime: String(returnTime), latitude, longitude, radiusMeters: 100, status: 'SCHEDULED', arrivedAt: null, departedAt: null, durationMinutes: null, createdAt: new Date().toISOString() };
     store.write('visits', [visit, ...store.read('visits')]); json(res, visit, 201);
+  },
+  'PATCH /api/visits/:id/verify-address': (req, res) => {
+    if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
+    const id = (req.url || '').split('/')[3]; const visits = store.read('visits'); const index = visits.findIndex((visit) => visit.id === id);
+    if (index < 0) return json(res, { error: 'Visit not found' }, 404);
+    visits[index] = { ...visits[index], addressVerified: true, addressVerifiedAt: new Date().toISOString() }; store.write('visits', visits); json(res, visits[index]);
   },
   'POST /api/visits/:id/location': async (req, res) => {
     if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
@@ -379,6 +385,7 @@ http.createServer(async (req, res) => {
     if (!handler && req.method === 'POST' && /^\/api\/inmates\/[^/]+\/photo$/.test(pathname)) handler = routes['POST /api/inmates/:id/photo'];
     if (!handler && req.method === 'GET' && /^\/api\/inmates\/[^/]+\/violations$/.test(pathname)) handler = routes['GET /api/inmates/:minNumber/violations'];
     if (!handler && req.method === 'POST' && /^\/api\/visits\/[^/]+\/location$/.test(pathname)) handler = routes['POST /api/visits/:id/location'];
+    if (!handler && req.method === 'PATCH' && /^\/api\/visits\/[^/]+\/verify-address$/.test(pathname)) handler = routes['PATCH /api/visits/:id/verify-address'];
     if (handler) return await handler(req, res);
     if (pathname === `${EXPO}/manifest`) return serveManifest(req, res, url);
     if (pathname.startsWith(`${EXPO}/r/`)) {
