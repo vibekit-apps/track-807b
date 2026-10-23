@@ -39,8 +39,12 @@ const routes = {
 
   'GET /api/tracking/status': (req, res) => {
     if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
-    const last = store.read('tracking-locations')[0];
-    json(res, { subject: { name: 'Monitored individual', initials: 'MI', status: 'WITHIN GEOFENCE', updated: last ? 'just now' : '2 min ago', latitude: last?.latitude || 40.7128, longitude: last?.longitude || -74.006 }, route: { geofence: 'Approved residence', radius: '0.5 mi', points: [{ x: 20, y: 70 }, { x: 28, y: 62 }, { x: 36, y: 66 }, { x: 45, y: 51 }, { x: 53, y: 55 }, { x: 63, y: 44 }] } });
+    const history = store.read('tracking-locations').filter((p) => Number.isFinite(p.latitude) && Number.isFinite(p.longitude)).slice(0, 200).reverse();
+    const last = history[history.length - 1] || null;
+    // v1 establishes the approved residence from the first recorded device position.
+    const geofence = history[0] ? { latitude: history[0].latitude, longitude: history[0].longitude, radiusMeters: 805 } : null;
+    const distance = geofence && last ? haversineMeters(geofence, last) : 0;
+    json(res, { subject: { name: 'Monitored individual', initials: 'MI', status: !last ? 'AWAITING GPS' : distance <= geofence.radiusMeters ? 'WITHIN GEOFENCE' : 'OUTSIDE GEOFENCE', updated: last ? new Date(last.recordedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'No location yet', latitude: last?.latitude || null, longitude: last?.longitude || null }, route: { geofence: 'Approved residence', radius: '0.5 mi', boundary: geofence, history } });
   },
   'POST /api/tracking/location': async (req, res) => {
     if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
@@ -84,6 +88,8 @@ const routes = {
     return user ? json(res, { user }) : json(res, { error: 'Not signed in' }, 401);
   },
 };
+
+function haversineMeters(a, b) { const r = Math.PI / 180; const dLat = (b.latitude - a.latitude) * r; const dLon = (b.longitude - a.longitude) * r; const x = Math.sin(dLat / 2) ** 2 + Math.cos(a.latitude * r) * Math.cos(b.latitude * r) * Math.sin(dLon / 2) ** 2; return 6371000 * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x)); }
 
 function json(res, data, status = 200, headers = {}) {
   const payload = JSON.stringify(data);
