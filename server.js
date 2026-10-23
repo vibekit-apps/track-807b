@@ -52,6 +52,16 @@ const routes = {
     const locations = store.read('tracking-locations');
     json(res, inmates.map((inmate) => ({ ...inmate, lastLocation: locations.find((location) => location.minNumber === inmate.minNumber) || null })));
   },
+  'POST /api/inmates/import': async (req, res) => {
+    if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
+    const { csv } = await readBody(req); const lines = String(csv || '').replace(/^\uFEFF/, '').split(/\r?\n/).filter(Boolean);
+    if (lines.length < 2) return json(res, { error: 'Choose a CSV with a header row and at least one inmate' }, 400);
+    const headers = lines.shift().split(',').map((value) => value.trim().toLowerCase()); const minIndex = headers.indexOf('min_number'); const nameIndex = headers.indexOf('full_name');
+    if (minIndex < 0) return json(res, { error: 'CSV must include a min_number column' }, 400);
+    const inmates = store.read('inmates'); let added = 0; let skipped = 0;
+    for (const line of lines) { const values = line.split(',').map((value) => value.trim()); const minNumber = values[minIndex]; if (!minNumber || inmates.some((item) => item.minNumber === minNumber)) { skipped++; continue; } inmates.unshift({ id: crypto.randomUUID(), minNumber: minNumber.slice(0, 40), name: String(nameIndex >= 0 ? values[nameIndex] || '' : '').slice(0, 100), geofenceName: 'Approved residence', createdAt: new Date().toISOString() }); added++; }
+    store.write('inmates', inmates); json(res, { added, skipped, total: inmates.length });
+  },
   'POST /api/inmates': async (req, res) => {
     if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
     const { minNumber, name, geofenceName } = await readBody(req);
