@@ -110,6 +110,26 @@ const routes = {
     const record = { id: crypto.randomUUID(), minNumber: String(minNumber).trim().slice(0, 40), verified: true, method: String(method || 'Facial identity verification'), createdAt: new Date().toISOString() };
     store.write('check-ins', [record, ...store.read('check-ins')]); json(res, record, 201);
   },
+  'GET /api/visits': (req, res) => {
+    if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
+    json(res, store.read('visits', []));
+  },
+  'POST /api/visits': async (req, res) => {
+    if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
+    const { minNumber, destinationType, destinationName, latitude, longitude } = await readBody(req);
+    if (!minNumber || !destinationType || !destinationName || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return json(res, { error: 'MIN number, destination, and location are required' }, 400);
+    const visit = { id: crypto.randomUUID(), minNumber: String(minNumber).trim().slice(0, 40), destinationType: destinationType === 'Police station' ? 'Police station' : 'Doctor', destinationName: String(destinationName).trim().slice(0, 120), latitude, longitude, radiusMeters: 100, status: 'SCHEDULED', arrivedAt: null, departedAt: null, durationMinutes: null, createdAt: new Date().toISOString() };
+    store.write('visits', [visit, ...store.read('visits')]); json(res, visit, 201);
+  },
+  'POST /api/visits/:id/location': async (req, res) => {
+    if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
+    const id = (req.url || '').split('/')[3]; const { latitude, longitude, accuracyMeters } = await readBody(req); const visits = store.read('visits'); const index = visits.findIndex((visit) => visit.id === id);
+    if (index < 0) return json(res, { error: 'Visit not found' }, 404); if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(accuracyMeters) || accuracyMeters > 10) return json(res, { error: 'A precise GPS reading within 10 meters is required' }, 422);
+    const visit = visits[index]; const inside = haversineMeters(visit, { latitude, longitude }) <= visit.radiusMeters; const now = new Date().toISOString();
+    if (inside && !visit.arrivedAt) { visit.arrivedAt = now; visit.status = 'AT DESTINATION'; }
+    if (!inside && visit.arrivedAt && !visit.departedAt) { visit.departedAt = now; visit.durationMinutes = Math.max(1, Math.round((Date.now() - new Date(visit.arrivedAt).getTime()) / 60000)); visit.status = 'COMPLETE'; }
+    visits[index] = visit; store.write('visits', visits); json(res, { visit, inside });
+  },
   'GET /api/reports/management': (req, res) => {
     if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
     const inmates = store.read('inmates'); const locations = store.read('tracking-locations'); const violations = store.read('alerts').filter((alert) => alert.type === 'address-violation'); const now = Date.now();
@@ -348,6 +368,7 @@ http.createServer(async (req, res) => {
     if (!handler && req.method === 'POST' && /^\/api\/alerts\/[^/]+\/ack$/.test(pathname)) handler = routes['POST /api/alerts/:id/ack'];
     if (!handler && req.method === 'PATCH' && /^\/api\/schedule\/[^/]+$/.test(pathname)) handler = routes['PATCH /api/schedule/:id'];
     if (!handler && req.method === 'GET' && /^\/api\/inmates\/[^/]+\/violations$/.test(pathname)) handler = routes['GET /api/inmates/:minNumber/violations'];
+    if (!handler && req.method === 'POST' && /^\/api\/visits\/[^/]+\/location$/.test(pathname)) handler = routes['POST /api/visits/:id/location'];
     if (handler) return await handler(req, res);
     if (pathname === `${EXPO}/manifest`) return serveManifest(req, res, url);
     if (pathname.startsWith(`${EXPO}/r/`)) {
