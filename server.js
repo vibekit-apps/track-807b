@@ -71,9 +71,10 @@ const routes = {
   },
   'POST /api/tracking/location': async (req, res) => {
     if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
-    const { latitude, longitude, minNumber } = await readBody(req);
+    const { latitude, longitude, minNumber, accuracyMeters } = await readBody(req);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return json(res, { error: 'A valid location is required' }, 400);
-    const location = { id: crypto.randomUUID(), minNumber: String(minNumber || '').trim() || null, latitude, longitude, recordedAt: new Date().toISOString() };
+    if (!Number.isFinite(accuracyMeters) || accuracyMeters > 10) return json(res, { error: 'A GPS reading accurate to within 10 meters is required' }, 422);
+    const location = { id: crypto.randomUUID(), minNumber: String(minNumber || '').trim() || null, latitude, longitude, accuracyMeters, recordedAt: new Date().toISOString() };
     // Keep a full same-day movement trail for the live map while bounding v1 storage.
     store.write('tracking-locations', [location, ...store.read('tracking-locations')].filter((entry) => Date.now() - new Date(entry.recordedAt).getTime() < 86400000).slice(0, 2000));
     json(res, location, 201);
