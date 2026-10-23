@@ -79,6 +79,14 @@ const routes = {
     const inmate = next.find((item) => item.id === id); if (!inmate) return json(res, { error: 'Inmate not found' }, 404);
     store.write('inmates', next); json(res, inmate);
   },
+  'POST /api/inmates/:id/photo': async (req, res) => {
+    if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
+    const id = (req.url || '').split('/')[3]; const { image } = await readBody(req);
+    if (!/^data:image\/(jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(String(image || ''))) return json(res, { error: 'Choose a valid inmate photo' }, 400);
+    if (String(image).length > 3 * 1024 * 1024) return json(res, { error: 'Photo is too large' }, 413);
+    const inmates = store.read('inmates'); const index = inmates.findIndex((inmate) => inmate.id === id); if (index < 0) return json(res, { error: 'Inmate not found' }, 404);
+    inmates[index] = { ...inmates[index], photoData: image, photoUpdatedAt: new Date().toISOString() }; store.write('inmates', inmates); json(res, inmates[index]);
+  },
   'POST /api/tracking/location': async (req, res) => {
     if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
     const { latitude, longitude, minNumber, accuracyMeters } = await readBody(req);
@@ -367,6 +375,7 @@ http.createServer(async (req, res) => {
     let handler = routes[`${req.method} ${pathname}`];
     if (!handler && req.method === 'POST' && /^\/api\/alerts\/[^/]+\/ack$/.test(pathname)) handler = routes['POST /api/alerts/:id/ack'];
     if (!handler && req.method === 'PATCH' && /^\/api\/schedule\/[^/]+$/.test(pathname)) handler = routes['PATCH /api/schedule/:id'];
+    if (!handler && req.method === 'POST' && /^\/api\/inmates\/[^/]+\/photo$/.test(pathname)) handler = routes['POST /api/inmates/:id/photo'];
     if (!handler && req.method === 'GET' && /^\/api\/inmates\/[^/]+\/violations$/.test(pathname)) handler = routes['GET /api/inmates/:minNumber/violations'];
     if (!handler && req.method === 'POST' && /^\/api\/visits\/[^/]+\/location$/.test(pathname)) handler = routes['POST /api/visits/:id/location'];
     if (handler) return await handler(req, res);
