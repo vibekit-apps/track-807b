@@ -116,9 +116,9 @@ const routes = {
   },
   'POST /api/visits': async (req, res) => {
     if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
-    const { minNumber, destinationType, destinationName, latitude, longitude, visitDate, leaveTime, returnTime } = await readBody(req);
-    if (!minNumber || !destinationType || !destinationName || !visitDate || !leaveTime || !returnTime || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return json(res, { error: 'MIN number, destination, date, leave time, return time, and location are required' }, 400);
-    const visit = { id: crypto.randomUUID(), minNumber: String(minNumber).trim().slice(0, 40), destinationType: destinationType === 'Police station' ? 'Police station' : 'Doctor', destinationName: String(destinationName).trim().slice(0, 120), visitDate: String(visitDate), leaveTime: String(leaveTime), returnTime: String(returnTime), latitude, longitude, radiusMeters: 100, status: 'SCHEDULED', arrivedAt: null, departedAt: null, durationMinutes: null, createdAt: new Date().toISOString() };
+    const { minNumber, destinationType, destinationName, destinationAddress, latitude, longitude, visitDate, leaveTime, returnTime } = await readBody(req);
+    if (!minNumber || !destinationType || !destinationName || !destinationAddress || !visitDate || !leaveTime || !returnTime || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return json(res, { error: 'MIN number, destination, address, date, leave time, return time, and location are required' }, 400);
+    const visit = { id: crypto.randomUUID(), minNumber: String(minNumber).trim().slice(0, 40), destinationType: destinationType === 'Police station' ? 'Police station' : 'Doctor', destinationName: String(destinationName).trim().slice(0, 120), destinationAddress: String(destinationAddress).trim().slice(0, 240), visitDate: String(visitDate), leaveTime: String(leaveTime), returnTime: String(returnTime), latitude, longitude, radiusMeters: 100, status: 'SCHEDULED', arrivedAt: null, departedAt: null, durationMinutes: null, createdAt: new Date().toISOString() };
     store.write('visits', [visit, ...store.read('visits')]); json(res, visit, 201);
   },
   'POST /api/visits/:id/location': async (req, res) => {
