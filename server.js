@@ -47,7 +47,8 @@ const routes = {
     const { latitude, longitude } = await readBody(req);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return json(res, { error: 'A valid location is required' }, 400);
     const location = { id: crypto.randomUUID(), latitude, longitude, recordedAt: new Date().toISOString() };
-    store.write('tracking-locations', [location, ...store.read('tracking-locations')].slice(0, 300));
+    // Keep a full same-day movement trail for the live map while bounding v1 storage.
+    store.write('tracking-locations', [location, ...store.read('tracking-locations')].filter((entry) => Date.now() - new Date(entry.recordedAt).getTime() < 86400000).slice(0, 2000));
     json(res, location, 201);
   },
   'POST /api/check-ins': async (req, res) => {
