@@ -46,11 +46,34 @@ const routes = {
     const distance = geofence && last ? haversineMeters(geofence, last) : 0;
     json(res, { subject: { name: 'Monitored individual', initials: 'MI', status: !last ? 'AWAITING GPS' : distance <= geofence.radiusMeters ? 'WITHIN GEOFENCE' : 'OUTSIDE GEOFENCE', updated: last ? new Date(last.recordedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'No location yet', latitude: last?.latitude || null, longitude: last?.longitude || null }, route: { geofence: 'Approved residence', radius: '0.5 mi', boundary: geofence, history } });
   },
+  'GET /api/inmates': (req, res) => {
+    if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
+    const inmates = store.read('inmates', []);
+    const locations = store.read('tracking-locations');
+    json(res, inmates.map((inmate) => ({ ...inmate, lastLocation: locations.find((location) => location.minNumber === inmate.minNumber) || null })));
+  },
+  'POST /api/inmates': async (req, res) => {
+    if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
+    const { minNumber, name, geofenceName } = await readBody(req);
+    const min = String(minNumber || '').trim();
+    if (!min) return json(res, { error: 'MIN number is required' }, 400);
+    const inmates = store.read('inmates');
+    if (inmates.some((inmate) => inmate.minNumber === min)) return json(res, { error: 'That MIN number already exists' }, 409);
+    const inmate = { id: crypto.randomUUID(), minNumber: min.slice(0, 40), name: String(name || '').trim().slice(0, 100), geofenceName: String(geofenceName || 'Approved residence').trim().slice(0, 100), createdAt: new Date().toISOString() };
+    store.write('inmates', [inmate, ...inmates]); json(res, inmate, 201);
+  },
+  'PATCH /api/inmates/:id': async (req, res) => {
+    if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
+    const id = (req.url || '').split('/')[3]; const body = await readBody(req); const inmates = store.read('inmates');
+    const next = inmates.map((inmate) => inmate.id === id ? { ...inmate, name: String(body.name ?? inmate.name).trim().slice(0, 100), geofenceName: String(body.geofenceName ?? inmate.geofenceName).trim().slice(0, 100) } : inmate);
+    const inmate = next.find((item) => item.id === id); if (!inmate) return json(res, { error: 'Inmate not found' }, 404);
+    store.write('inmates', next); json(res, inmate);
+  },
   'POST /api/tracking/location': async (req, res) => {
     if (!auth.userFor(req)) return json(res, { error: 'Sign in first' }, 401);
-    const { latitude, longitude } = await readBody(req);
+    const { latitude, longitude, minNumber } = await readBody(req);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return json(res, { error: 'A valid location is required' }, 400);
-    const location = { id: crypto.randomUUID(), latitude, longitude, recordedAt: new Date().toISOString() };
+    const location = { id: crypto.randomUUID(), minNumber: String(minNumber || '').trim() || null, latitude, longitude, recordedAt: new Date().toISOString() };
     // Keep a full same-day movement trail for the live map while bounding v1 storage.
     store.write('tracking-locations', [location, ...store.read('tracking-locations')].filter((entry) => Date.now() - new Date(entry.recordedAt).getTime() < 86400000).slice(0, 2000));
     json(res, location, 201);

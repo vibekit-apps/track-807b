@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Link, usePathname } from 'expo-router';
 
 export const C = { navy: '#0f172a', blue: '#38bdf8', pale: '#e2e8f0', muted: '#94a3b8', panel: '#17233b', line: '#2a3a54', danger: '#fb7185', warning: '#fbbf24', good: '#34d399' };
-const tabs = [{ href: '/', icon: 'map-outline', label: 'Live Map' }, { href: '/check-in', icon: 'shield-checkmark-outline', label: 'Check In' }, { href: '/alerts', icon: 'notifications-outline', label: 'Alerts' }, { href: '/schedule', icon: 'calendar-outline', label: 'Schedule' }, { href: '/settings', icon: 'settings-outline', label: 'Settings' }] as const;
+const tabs = [{ href: '/', icon: 'map-outline', label: 'Live Map' }, { href: '/inmates', icon: 'people-outline', label: 'Inmates' }, { href: '/check-in', icon: 'shield-checkmark-outline', label: 'Check In' }, { href: '/alerts', icon: 'notifications-outline', label: 'Alerts' }, { href: '/schedule', icon: 'calendar-outline', label: 'Schedule' }, { href: '/settings', icon: 'settings-outline', label: 'Settings' }] as const;
 
 export function Screen({ children, title, subtitle, action }: { children: ReactNode; title: string; subtitle?: string; action?: ReactNode }) {
   return <View style={s.screen}><ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}><View style={s.heading}><View><Text style={s.eyebrow}>SENTINEL BAIL</Text><Text style={s.title}>{title}</Text>{subtitle && <Text style={s.subtitle}>{subtitle}</Text>}</View>{action}</View>{children}</ScrollView><Nav /></View>;
