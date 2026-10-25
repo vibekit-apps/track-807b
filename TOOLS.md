@@ -1,17 +1,16 @@
 # TOOLS.md — track-807b
 
-> Only the part of this file ABOVE the "INJECTED CONTEXT ENDS" marker reaches
-> your context automatically. Everything below it is on disk in this same file
-> and documents real APIs you have. **Run `cat TOOLS.md` before calling any
+> Only the part ABOVE the "INJECTED CONTEXT ENDS" marker reaches your context;
+> everything below is on disk in this file and documents real APIs you have.
+> **Run `cat TOOLS.md` before calling any
 > API whose payload is not shown above — never improvise an endpoint, field, or
 > slug.** The index below tells you when to reach for each one.
 
 ## What you have
-- Shell: node, npm, git, curl (sandboxed — no docker/aws/ssh). Only the workspace outlives a command: global installs, agent skills, MCP servers and CLI logins vanish at exit, so a vendor's "set up your agent" installer never takes here, whatever it prints. Use its API with a key in §Environment.
-- File read/write on your workspace (which IS the live app code)
-- web_fetch (a URL you already have), sub-agents, image analysis
-- VibeKit API via the preset `VIBEKIT_*` env vars (see AGENTS.md for endpoints)
-- Web search when the route offers it; `web_fetch` retrieves a URL you already have. Never invent an address, price or phone number: ask.
+- Shell: node, npm, git, curl (sandboxed — no docker/aws/ssh). Only the workspace outlives a command: global installs, agent skills, MCP servers and CLI logins vanish at exit, so a vendor's agent installer never takes, whatever it prints. Use its API with a key in §Environment.
+- File read/write on your workspace (which IS the live app code), sub-agents, image analysis
+- VibeKit API via the preset `VIBEKIT_*` env vars (endpoints: AGENTS.md)
+- `web_search`: ONE AI answer with sources, billed; `web_fetch` reads a URL you have → §Web search. Never invent an address, price or phone number: ask.
 
 ## Rules that must never wait for a file read
 - **Nothing runs between turns.** Never promise timed or later work ("every 15
@@ -519,12 +518,12 @@ curl -s "$VIBEKIT_API_URL/api/v1/hosting/app/$VIBEKIT_APP_ID/agent/repo" \
 ```
 
 Relay `export` as the answer. `agentCanExport` is always false: the export is
-the owner's action in the dashboard. Never print files for hand-copying, never
-write a ZIP the user cannot reach, never ask for a GitHub token.
+the owner's action, in the app on iOS. Never print files for hand-copying, never
+zip the workspace (it holds the app's data and .env), never ask for a GitHub token.
 
 ## Environment — runtime secrets and app passwords
 The deployed app's runtime env is PORT, NODE_ENV, DATABASE_URL plus whatever is
-in the app's Environment. **Environment variables**: in VibeKit, not the built app. iOS — tap the app name atop the chat, then **Environment**; web — the app's **Settings** tab. Anything the APP needs at
+in the app's Environment. **Environment variables**: in VibeKit, not the built app. iOS — tap the workspace name atop the chat, then **Environment**; web — the workspace's **Settings** tab. Anything the APP needs at
 runtime — a staff password, a PIN, a third-party API key — belongs there, read
 as `process.env.NAME`. The OWNER's own admin access is never a password: it
 is the owner link (§Sign in with Google).
@@ -570,7 +569,7 @@ curl -s -X PUT "$VIBEKIT_API_URL/api/v1/hosting/app/$VIBEKIT_APP_ID/env" \
 The app the user asked you to build can call real AI itself — a chatbot, a
 recommender, a summarizer — WITHOUT the user buying an OpenAI plan or pasting
 any key. The platform serves it and bills the owner's VibeKit credits
-(cost x markup, capped per day); at $0 balance it degrades to the free model
+(cost x markup, capped per day); out of credits, it degrades to the free model
 pool instead of dying. Never tell a user their app needs "OpenAI API billing"
 — wire it to this instead.
 
@@ -598,7 +597,7 @@ base64 PNG/JPEG/WebP/GIF data URL or an https URL (up to 4 pictures,
 (web: a canvas, or public/shrink-photo.js if the app has it; Expo: expo-image-manipulator from the deps action, then lib/shrink-photo.ts if present). Pictures out: POST `VIBEKIT_AI_URL + '/image'` with the same
 headers and `{ prompt, aspect_ratio?, image? }` (`image`: a data URL to edit)
 → `{ image: "data:image/png;base64,…", mime, model }`, ready for `<img src>`.
-Pictures bill the owner's credits and need a balance above $0 (402 otherwise;
+Pictures bill the owner's credits and need credits above $0 (402 otherwise;
 text keeps working). No tools.
 
 Voice, for an app that listens or talks (push to talk), same headers:
@@ -819,6 +818,21 @@ curl -s -X POST "$VIBEKIT_API_URL/api/v1/hosting/app/$VIBEKIT_APP_ID/schedules" 
 - Confirm in one plain line, no cron, ids or UTC. `GET` the same URL lists
   them; `PATCH …/schedules/<id>` with `{"enabled":false}` pauses; `DELETE` removes.
 
+## Web search (one answer, not a result list)
+- `web_search` asks Perplexity and returns ONE AI-written answer plus the URLs
+  it cited, never a list of results. `count` does nothing; `freshness` works.
+  An uncached search uses credits under the model-call credit gate.
+- Ask a full question ("What does X cost in the US in 2026?"), not keywords.
+  Before you rely on a figure (price, date, address, score), `web_fetch` a
+  cited URL and check it there.
+- Raw search results, Google Trends, SEO or stats (sports, markets): the
+  `vibekit_paid_tools` tool (§Paid tools), not more searches.
+- `web_fetch` reads a URL you already have. A site that blocks it is retried
+  once through VibeKit's fetcher, on the owner's own Anthropic key if they
+  connected one, else on their credits (the result says what it cost; the free
+  model route without a connected provider is refused). An error after that is final: do not fetch that URL again;
+  try `vibekit_paid_tools` or tell the user.
+
 ## Paid tools — Instant
 
 Discover the full supported catalog with `GET /api/v1/hosting/app/$VIBEKIT_APP_ID/agent/instant/tools`
@@ -928,7 +942,7 @@ has the full layout.
 curl -s -X POST "$VIBEKIT_API_URL/api/v1/hosting/app/$VIBEKIT_APP_ID/deps" \
   -H "Authorization: Bearer $VIBEKIT_API_KEY" -H 'Content-Type: application/json' \
   -d '{"add":["expo-haptics"]}'
-# → { "added": { "expo-haptics": "~57.0.3" }, "unchanged": [], "message": "Added … The publish after your reply builds it into the app." }
+# → { "added": { "expo-haptics": "~58.0.7" }, "unchanged": [], "message": "Added … The publish after your reply builds it into the app." }
 # 400 { "error": "not_allowed", "allowed": [ … ] }: Expo Go cannot run it. Use one
 #   from `allowed` or build the feature without it, and say which part waits.
 ```
